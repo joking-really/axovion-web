@@ -1,108 +1,84 @@
 # Axovion.io Deployment Guide
 
-## Recommended Hosting Architecture
+## TL;DR - Quick Decision
 
-For a production-ready, cost-effective, and reliable deployment, I recommend **Option 1** (Platform-as-a-Service) for ease and speed, or **Option 3** (VPS) for maximum cost savings long-term.
+**New to deployment?** Use Option 1 (Vercel + Railway) - easiest, free, done in 30 minutes.
 
----
-
-## Option 1: Platform-as-a-Service (Recommended for Beginners)
-
-**Best for:** Quick deployment, zero server management, automatic scaling
-
-### Stack
-- **Frontend:** Vercel (Free tier)
-- **Backend:** Railway.app or Render.com (Free tier)
-- **Database:** MongoDB Atlas (Free M0 cluster)
-- **Custom Domain:** Cloudflare (Free DNS + CDN)
-
-### Why This Stack?
-- **Vercel:** Optimized for React, automatic deployments from Git, global CDN, free SSL
-- **Railway/Render:** Simple container deployment, automatic HTTPS, environment variables management
-- **MongoDB Atlas:** Managed database with backups, monitoring, and free tier
-- **Estimated Cost:** $0-10/month (depending on traffic)
+**Want cheapest long-term?** Use Option 3 (Hetzner VPS) - $6/month, full control.
 
 ---
 
-## Option 2: Cloud-Native (Best for Scale)
+## Step 0: Pre-Deployment Checklist
 
-**Best for:** High traffic, microservices architecture, enterprise
-
-### Stack
-- **Frontend:** AWS S3 + CloudFront or Cloudflare Pages
-- **Backend:** AWS ECS/Fargate or Google Cloud Run
-- **Database:** MongoDB Atlas or AWS DocumentDB
-- **Load Balancer:** AWS ALB or Cloudflare
-
-### Why This Stack?
-- Pay-as-you-go pricing
-- Enterprise-grade reliability
-- Advanced security features
-- **Estimated Cost:** $20-100/month
+Before deploying, ensure:
+- [ ] All API keys are working in local environment
+- [ ] MongoDB is running locally
+- [ ] Frontend loads without errors
+- [ ] Chatbot responds correctly
+- [ ] AI Audit form submits successfully
+- [ ] All `.env` files are configured (NOT committed to git)
 
 ---
 
-## Option 3: VPS/Cloud Server (Most Cost-Effective)
+## Option 1: Vercel + Railway + MongoDB Atlas (RECOMMENDED)
 
-**Best for:** Full control, predictable pricing, long-term savings
+**Best for:** Beginners, fast deployment, zero maintenance
+**Cost:** FREE (for moderate traffic)
+**Time:** 30 minutes
+**Difficulty:** Easy
 
-### Stack
-- **Server:** Hetzner Cloud (€5.35/month) or DigitalOcean ($6/month)
-- **Web Server:** Nginx (reverse proxy + static file serving)
-- **Process Manager:** PM2 (for backend)
-- **Database:** MongoDB (self-hosted on same server)
-- **SSL:** Let's Encrypt (free)
-
-### Why This Stack?
-- **Cheapest option** for moderate traffic
-- Full control over the environment
-- Can host everything on one server
-- **Estimated Cost:** $6-10/month
+### Why This Option?
+- Zero server management
+- Automatic HTTPS/SSL
+- Global CDN (fast worldwide)
+- Auto-scaling
+- Git-based deployment
 
 ---
 
-## Option 4: Static + Serverless (Ultra-Cheap)
+### Step 1: Prepare Your Repository
 
-**Best for:** Low traffic, hobby projects, proof of concepts
+#### 1.1 Create production environment files
 
-### Stack
-- **Frontend:** Cloudflare Pages (Free, unlimited bandwidth)
-- **Backend:** Cloudflare Workers or Vercel Serverless Functions
-- **Database:** MongoDB Atlas (Free tier)
-
-### Why This Stack?
-- Nearly free for low traffic
-- Edge computing for low latency
-- **Estimated Cost:** $0-5/month
-
----
-
-# Step-by-Step Deployment Guides
-
----
-
-## Guide A: Deploy on Vercel + Railway (Recommended)
-
-### Prerequisites
-- GitHub account
-- Domain name (optional but recommended)
-
-### Step 1: Prepare Your Code
-
-#### 1.1 Update Frontend API URL
-In `frontend/.env.production`:
+Create `frontend/.env.production`:
 ```env
-REACT_APP_API_URL=https://your-backend-url.railway.app/api
+REACT_APP_API_URL=https://your-backend-url.up.railway.app/api
 REACT_APP_SITE_URL=https://your-frontend-url.vercel.app
 ```
 
-#### 1.2 Update Backend CORS
-In `backend/.env`:
+Create `backend/.env.production`:
 ```env
+# Database
+MONGO_URL=mongodb+srv://username:password@cluster.mongodb.net/axovion?retryWrites=true&w=majority
+DB_NAME=axovion
+
+# Security
+JWT_SECRET=your-super-secret-jwt-key-min-32-chars
+ADMIN_EMAIL=admin@axovion.io
+ADMIN_PASSWORD=your-secure-admin-password
+
+# APIs
+GROQ_API_KEY=your-groq-key
+KIMI_API_KEY=your-kimi-key
+RESEND_API_KEY=your-resend-key
+RETELL_API_KEY=your-retell-key
+VAPI_API_KEY=your-vapi-key
+
+# Email
+RESEND_FROM_NAME=Axovion AI
+RESEND_FROM_EMAIL=onboarding@resend.dev
+
+# CORS - Add your Vercel URL here
 CORS_ORIGINS=https://your-frontend-url.vercel.app,https://www.yourdomain.com
+
+# Lead Scoring
+HIGH_VALUE_REVENUE_USD=50000
+HIGH_VALUE_BUDGET_USD=5000
 ```
 
-#### 1.3 Create `vercel.json` in frontend/
+#### 1.2 Add deployment config files
+
+Create `frontend/vercel.json`:
 ```json
 {
   "routes": [
@@ -115,7 +91,7 @@ CORS_ORIGINS=https://your-frontend-url.vercel.app,https://www.yourdomain.com
 }
 ```
 
-#### 1.4 Create `railway.toml` in backend/
+Create `backend/railway.toml`:
 ```toml
 [build]
 builder = "nixpacks"
@@ -126,207 +102,340 @@ healthcheckPath = "/api/health"
 healthcheckTimeout = 100
 ```
 
-#### 1.5 Create `requirements.txt` (update if needed)
-Ensure all dependencies are listed:
-```txt
-fastapi==0.115.12
-uvicorn==0.34.0
-pydantic==2.11.4
-motor==3.7.0
-pymongo==4.17.0
-httpx==0.28.1
-bcrypt==4.1.3
-pyjwt==2.12.1
-passlib==1.7.4
-python-dotenv==1.2.2
-email-validator==2.3.0
-python-jose==3.5.0
-python-multipart==0.0.28
-requests==2.34.1
-pandas==2.2.0
-numpy==1.26.0
-boto3==1.43.7
-requests-oauthlib==2.0.0
-cryptography==42.0.8
-tzdata==2024.2
-jq==1.11.0
+#### 1.3 Update `.gitignore`
+Ensure these are in `.gitignore`:
+```
+# Environment files
+.env
+.env.local
+.env.production
+
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+build/
 ```
 
-### Step 2: Deploy Frontend to Vercel
+#### 1.4 Commit your code
+```bash
+git add .
+git commit -m "Prepare for deployment"
+git push origin main
+```
 
-1. Push your code to GitHub
-2. Go to [vercel.com](https://vercel.com)
-3. Click "Add New Project"
-4. Import your GitHub repository
-5. Set root directory to `frontend`
-6. Add environment variables from `.env.production`
-7. Click Deploy
-8. Note down your Vercel URL (e.g., `https://axovion.vercel.app`)
+---
+
+### Step 2: Setup MongoDB Atlas (Database)
+
+1. Go to [mongodb.com/atlas](https://mongodb.com/atlas)
+2. Click "Try Free" and create account
+3. Create new project named "Axovion"
+4. Build a database:
+   - Choose "M0" (free tier)
+   - Select region closest to your users
+   - Name cluster: "axovion-cluster"
+5. Create database user:
+   - Username: `axovion_admin`
+   - Password: Generate a strong password
+   - Click "Create User"
+6. Add IP addresses:
+   - Click "Add My Current IP Address"
+   - Also add: `0.0.0.0/0` (allows Railway to connect)
+   - **Note:** For production, restrict this later
+7. Get connection string:
+   - Click "Connect" → "Drivers"
+   - Select "Python"
+   - Copy the connection string
+   - Replace `<password>` with your actual password
+   - Example: `mongodb+srv://axovion_admin:YourPassword@axovion-cluster.xxxxx.mongodb.net/axovion?retryWrites=true&w=majority`
+
+---
 
 ### Step 3: Deploy Backend to Railway
 
 1. Go to [railway.app](https://railway.app)
-2. Click "New Project"
-3. Select "Deploy from GitHub repo"
-4. Import your repository
-5. Set root directory to `backend`
-6. Add environment variables in Railway Dashboard:
-   - Click on your service → Variables → Add all from `.env`
-7. Railway will auto-detect Python and deploy
-8. Note down your Railway URL (e.g., `https://axovion-api.up.railway.app`)
+2. Sign up with GitHub
+3. Click "New Project"
+4. Select "Deploy from GitHub repo"
+5. Find and select your repository
+6. Click "Add Variables" and add ALL from `backend/.env.production`:
+   - MONGO_URL (from Step 2)
+   - DB_NAME
+   - JWT_SECRET (generate new random string)
+   - ADMIN_EMAIL
+   - ADMIN_PASSWORD
+   - GROQ_API_KEY
+   - KIMI_API_KEY
+   - RESEND_API_KEY
+   - RETELL_API_KEY
+   - VAPI_API_KEY
+   - RESEND_FROM_NAME
+   - RESEND_FROM_EMAIL
+   - CORS_ORIGINS (use your Vercel URL from Step 4)
+   - HIGH_VALUE_REVENUE_USD
+   - HIGH_VALUE_BUDGET_USD
+7. Railway auto-detects Python and deploys
+8. Wait for deployment (2-3 minutes)
+9. Note your Railway URL: `https://axovion-api.up.railway.app`
 
-### Step 4: Update Environment Variables
-
-1. Go back to Vercel → Project Settings → Environment Variables
-2. Update `REACT_APP_API_URL` to your Railway URL + `/api`
-3. Redeploy frontend (Vercel will auto-redeploy)
-
-### Step 5: Set Up MongoDB Atlas
-
-1. Go to [mongodb.com/atlas](https://mongodb.com/atlas)
-2. Create free cluster (M0)
-3. Create a database user
-4. Whitelist IPs (or allow from anywhere for Railway)
-5. Get connection string:
-   ```
-   mongodb+srv://username:password@cluster.mongodb.net/axovion?retryWrites=true&w=majority
-   ```
-6. Add this to Railway environment variables as `MONGO_URL`
-
-### Step 6: Connect Custom Domain (Optional)
-
-#### On Vercel:
-1. Project Settings → Domains
-2. Add your domain
-3. Follow DNS instructions
-
-#### On Railway:
-1. Service Settings → Domains
-2. Add custom domain
-3. Configure DNS CNAME record
-
-#### On Cloudflare (Recommended for DNS):
-1. Add your domain to Cloudflare
-2. Update nameservers at your registrar
-3. Add CNAME records:
-   - `www` → `cname.vercel-dns.com`
-   - `api` → your Railway domain
-4. Enable "Full (Strict)" SSL mode
-
-### Step 7: Verify Deployment
-
-Test these endpoints:
-- Frontend: `https://yourdomain.com`
-- API: `https://api.yourdomain.com/api/health`
-- Chat: Test the chatbot on your site
+**Test backend:**
+```bash
+curl https://axovion-api.up.railway.app/api/health
+```
+Should return: `{"status":"healthy"}`
 
 ---
 
-## Guide B: Deploy on Hetzner VPS (Most Cost-Effective)
+### Step 4: Deploy Frontend to Vercel
 
-### Prerequisites
-- Hetzner Cloud account
-- Domain name
-- SSH key pair
+1. Go to [vercel.com](https://vercel.com)
+2. Sign up with GitHub
+3. Click "Add New Project"
+4. Import your GitHub repository
+5. Configure project:
+   - Framework Preset: Create React App
+   - Root Directory: `frontend`
+   - Build Command: `npm run build`
+   - Output Directory: `build`
+6. Add Environment Variables:
+   - `REACT_APP_API_URL` = `https://axovion-api.up.railway.app/api`
+   - `REACT_APP_SITE_URL` = `https://axovion.vercel.app`
+7. Click "Deploy"
+8. Wait for build (2-3 minutes)
+9. Note your Vercel URL: `https://axovion.vercel.app`
+
+---
+
+### Step 5: Update CORS (IMPORTANT)
+
+1. Go back to Railway dashboard
+2. Click your project → Variables
+3. Update `CORS_ORIGINS`:
+   ```
+   https://axovion.vercel.app,https://www.yourdomain.com
+   ```
+4. Railway auto-redeploys
+
+---
+
+### Step 6: Add Custom Domain (Optional)
+
+#### Buy Domain (if needed):
+- Namecheap, GoDaddy, or Google Domains
+- Recommended: `yourdomain.com`
+
+#### Setup Cloudflare (Recommended):
+1. Go to [cloudflare.com](https://cloudflare.com)
+2. Add your domain
+3. Update nameservers at your registrar
+4. Add DNS records:
+   
+   **Type:** CNAME
+   - Name: `www`
+   - Target: `cname.vercel-dns.com`
+   
+   **Type:** CNAME
+   - Name: `api`
+   - Target: `your-railway-url.up.railway.app`
+
+5. SSL/TLS mode: "Full (Strict)"
+6. Always Use HTTPS: ON
+
+#### Add Domain to Vercel:
+1. Vercel Dashboard → Your Project → Settings → Domains
+2. Add `www.yourdomain.com`
+3. Follow instructions
+
+#### Add Domain to Railway:
+1. Railway Dashboard → Your Service → Settings → Domains
+2. Add `api.yourdomain.com`
+3. Update DNS in Cloudflare
+
+---
+
+### Step 7: Verify Everything Works
+
+Test these URLs:
+1. **Frontend:** `https://yourdomain.com` (should load)
+2. **API Health:** `https://api.yourdomain.com/api/health` (should return healthy)
+3. **Chatbot:** Open site → click chat → send "Hello" (should respond)
+4. **AI Audit:** Go to /audit → fill form → submit (should work)
+5. **Admin Panel:** Go to /admin/login → login with credentials
+
+---
+
+## Option 2: Hetzner VPS (Most Cost-Effective)
+
+**Best for:** Full control, cheapest long-term
+**Cost:** $6/month
+**Time:** 1-2 hours
+**Difficulty:** Intermediate
+
+---
 
 ### Step 1: Create Server
 
 1. Go to [console.hetzner.cloud](https://console.hetzner.cloud)
-2. Create new project
-3. Add server:
+2. Create project → Add server
+3. Configuration:
    - Location: Closest to your users (e.g., US East, EU Central)
-   - Image: Ubuntu 22.04
-   - Type: CPX11 (2 vCPU, 4 GB RAM) - €5.35/month
-   - Add your SSH key
-4. Note the IP address
+   - Image: Ubuntu 22.04 LTS
+   - Type: CPX11 (2 vCPU, 4 GB RAM, 40 GB SSD) - €5.35/month
+   - Name: `axovion-prod`
+   - SSH Key: Add your public key (`cat ~/.ssh/id_rsa.pub`)
+4. Click Create
+5. Note the IP address (e.g., `123.45.67.89`)
 
-### Step 2: Initial Server Setup
+---
 
-SSH into your server:
+### Step 2: Connect to Server
+
 ```bash
-ssh root@YOUR_SERVER_IP
+ssh root@123.45.67.89
 ```
 
-Create a non-root user:
+**If you don't have SSH key:**
 ```bash
-adduser axovion
-usermod -aG sudo axovion
-su - axovion
+ssh-copy-id root@123.45.67.89
 ```
 
-### Step 3: Install Dependencies
+---
+
+### Step 3: Initial Server Setup
 
 ```bash
 # Update system
-sudo apt update && sudo apt upgrade -y
+apt update && apt upgrade -y
 
-# Install required packages
-sudo apt install -y nginx git python3 python3-pip python3-venv nodejs npm mongodb
+# Install essential tools
+apt install -y curl wget git nano ufw fail2ban
 
-# Install PM2 globally
-sudo npm install -g pm2
+# Create non-root user
+adduser axovion
+usermod -aG sudo axovion
+
+# Switch to new user
+su - axovion
+```
+
+---
+
+### Step 4: Install Dependencies
+
+```bash
+# Install Python & pip
+sudo apt install -y python3 python3-pip python3-venv
+
+# Install Node.js (LTS)
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Install Nginx
+sudo apt install -y nginx
+
+# Install MongoDB
+wget -qO - https://www.mongodb.org/static/pgp/server-6.0.asc | sudo apt-key add -
+echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list
+sudo apt update
+sudo apt install -y mongodb-org
 
 # Start MongoDB
 sudo systemctl start mongod
 sudo systemctl enable mongod
 
+# Install PM2
+sudo npm install -g pm2
+
 # Install certbot for SSL
 sudo apt install -y certbot python3-certbot-nginx
 ```
 
-### Step 4: Clone and Setup Application
+---
+
+### Step 5: Clone Repository
 
 ```bash
-cd /home/axovion
-git clone YOUR_GITHUB_REPO_URL axovion
+cd ~
+git clone https://github.com/YOUR_USERNAME/axovion.git
 cd axovion
 ```
 
-#### Setup Backend:
+---
+
+### Step 6: Setup Backend
+
 ```bash
 cd backend
+
+# Create virtual environment
 python3 -m venv venv
 source venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
+
+# Create production env file
+cp .env .env.production
+nano .env.production
 ```
 
-Create `.env` file:
-```bash
-nano .env
+Update these values:
+```env
+MONGO_URL=mongodb://localhost:27017/axovion
+JWT_SECRET=your-super-secret-key-change-this
+CORS_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
 ```
-Add your environment variables (same as local but with production values).
 
-#### Setup Frontend:
+---
+
+### Step 7: Setup Frontend
+
 ```bash
 cd ../frontend
+
+# Install dependencies
 npm install
+
+# Create production build
 npm run build
 ```
 
-### Step 5: Configure Nginx
+---
 
-Create Nginx config:
+### Step 8: Configure Nginx
+
 ```bash
 sudo nano /etc/nginx/sites-available/axovion
 ```
 
-Add this configuration:
+Paste this configuration:
 ```nginx
-# Frontend - Static files
 server {
     listen 80;
     server_name yourdomain.com www.yourdomain.com;
     
+    # Frontend - React build files
     location / {
         root /home/axovion/axovion/frontend/build;
         try_files $uri /index.html;
         
-        # Gzip compression
+        # Enable gzip
         gzip on;
-        gzip_types text/plain text/css application/json application/javascript text/xml;
+        gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
+        gzip_min_length 1000;
+        
+        # Cache static assets
+        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+        }
     }
     
-    # API Proxy
+    # Backend API proxy
     location /api/ {
         proxy_pass http://localhost:8000/api/;
         proxy_http_version 1.1;
@@ -337,6 +446,11 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_cache_bypass $http_upgrade;
+        
+        # Timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
     }
 }
 ```
@@ -344,18 +458,39 @@ server {
 Enable the site:
 ```bash
 sudo ln -s /etc/nginx/sites-available/axovion /etc/nginx/sites-enabled/
+sudo rm /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl restart nginx
 ```
 
-### Step 6: Setup PM2 for Backend
+---
+
+### Step 9: Setup SSL Certificate
 
 ```bash
-cd /home/axovion/axovion/backend
+sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com
+```
+
+Follow prompts:
+- Enter email
+- Accept terms
+- Choose to redirect HTTP to HTTPS (Option 2)
+
+Auto-renewal test:
+```bash
+sudo certbot renew --dry-run
+```
+
+---
+
+### Step 10: Setup PM2 for Backend
+
+```bash
+cd ~/axovion/backend
 source venv/bin/activate
 ```
 
-Create PM2 ecosystem file:
+Create ecosystem file:
 ```bash
 nano ecosystem.config.js
 ```
@@ -372,10 +507,20 @@ module.exports = {
     watch: false,
     max_memory_restart: '1G',
     env: {
-      NODE_ENV: 'production'
-    }
+      NODE_ENV: 'production',
+      PYTHONUNBUFFERED: '1'
+    },
+    log_file: '/home/axovion/logs/combined.log',
+    out_file: '/home/axovion/logs/out.log',
+    error_file: '/home/axovion/logs/error.log',
+    time: true
   }]
 };
+```
+
+Create logs directory:
+```bash
+mkdir -p ~/logs
 ```
 
 Start with PM2:
@@ -385,97 +530,136 @@ pm2 save
 pm2 startup systemd
 ```
 
-### Step 7: Setup SSL with Let's Encrypt
+---
+
+### Step 11: Configure Firewall
 
 ```bash
-sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com
-```
-
-Follow prompts. Choose to redirect HTTP to HTTPS.
-
-### Step 8: Configure Firewall
-
-```bash
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
 sudo ufw allow OpenSSH
 sudo ufw allow 'Nginx Full'
 sudo ufw enable
 ```
 
-### Step 9: Setup MongoDB (Production)
+Verify:
+```bash
+sudo ufw status
+```
 
-Create admin user:
+---
+
+### Step 12: Secure MongoDB
+
 ```bash
 mongosh
 ```
 
 ```javascript
+// Create admin user
 use admin
 db.createUser({
   user: "admin",
   pwd: "YOUR_STRONG_PASSWORD",
-  roles: [ { role: "userAdminAnyDatabase", db: "admin" } ]
+  roles: [
+    { role: "userAdminAnyDatabase", db: "admin" },
+    { role: "dbAdminAnyDatabase", db: "admin" },
+    { role: "readWriteAnyDatabase", db: "admin" }
+  ]
+})
+
+// Create app-specific user
+use axovion
+db.createUser({
+  user: "axovion_app",
+  pwd: "APP_STRONG_PASSWORD",
+  roles: [
+    { role: "readWrite", db: "axovion" }
+  ]
 })
 ```
 
-Enable authentication in `/etc/mongod.conf`:
+Exit mongosh: `exit`
+
+Enable authentication:
+```bash
+sudo nano /etc/mongod.conf
+```
+
+Add:
 ```yaml
 security:
   authorization: enabled
 ```
 
-Restart MongoDB:
+Restart:
 ```bash
 sudo systemctl restart mongod
 ```
 
-Update backend `.env`:
+Update backend `.env.production`:
 ```env
-MONGO_URL=mongodb://admin:YOUR_PASSWORD@localhost:27017/axovion?authSource=admin
+MONGO_URL=mongodb://axovion_app:APP_PASSWORD@localhost:27017/axovion?authSource=axovion
 ```
 
-### Step 10: Setup Automated Deployments
+---
 
-Create deploy script:
+### Step 13: Create Deployment Script
+
 ```bash
-nano /home/axovion/deploy.sh
+nano ~/deploy.sh
 ```
 
 ```bash
 #!/bin/bash
 set -e
 
-cd /home/axovion/axovion
+echo "Starting deployment..."
+
+cd ~/axovion
 
 # Pull latest code
+echo "Pulling latest code..."
 git pull origin main
 
 # Update backend
+echo "Updating backend..."
 cd backend
 source venv/bin/activate
 pip install -r requirements.txt
 
 # Update frontend
+echo "Building frontend..."
 cd ../frontend
 npm install
 npm run build
 
 # Restart backend
+echo "Restarting backend..."
 pm2 restart axovion-api
 
 # Reload nginx
+echo "Reloading nginx..."
 sudo nginx -s reload
 
-echo "Deployment completed!"
+echo "Deployment completed successfully!"
 ```
 
 Make executable:
 ```bash
-chmod +x /home/axovion/deploy.sh
+chmod +x ~/deploy.sh
 ```
 
-### Step 11: Setup GitHub Actions (CI/CD)
+Test deployment:
+```bash
+./deploy.sh
+```
 
-Create `.github/workflows/deploy.yml`:
+---
+
+### Step 14: Setup GitHub Actions (Auto-Deploy)
+
+On your local machine, create `.github/workflows/deploy.yml`:
 
 ```yaml
 name: Deploy to Production
@@ -487,8 +671,10 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout code
+      uses: actions/checkout@v3
     
     - name: Deploy to server
       uses: appleboy/ssh-action@master
@@ -497,7 +683,7 @@ jobs:
         username: axovion
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         script: |
-          cd /home/axovion/axovion
+          cd ~/axovion
           git pull origin main
           cd backend && source venv/bin/activate && pip install -r requirements.txt
           cd ../frontend && npm install && npm run build
@@ -505,151 +691,149 @@ jobs:
           sudo nginx -s reload
 ```
 
-Add secrets in GitHub repository settings.
+Add GitHub secrets:
+1. Go to GitHub → Your Repo → Settings → Secrets and variables → Actions
+2. Add `SERVER_IP`: Your server IP
+3. Add `SSH_PRIVATE_KEY`: Your private key content (`cat ~/.ssh/id_rsa`)
 
 ---
 
-## Guide C: Deploy on Render (Alternative)
+### Step 15: Monitoring & Maintenance
 
-### Frontend (Static Site)
+Install monitoring tools:
+```bash
+# Install netdata (system monitoring)
+bash <(curl -Ss https://my-netdata.io/kickstart.sh)
+```
+
+Access netdata: `http://your-server-ip:19999`
+
+Setup log rotation:
+```bash
+sudo nano /etc/logrotate.d/axovion
+```
+
+```
+/home/axovion/logs/*.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0644 axovion axovion
+}
+```
+
+---
+
+## Option 3: Render.com (Alternative)
+
+**Best for:** Simple deployment, good free tier
+**Cost:** FREE
+**Time:** 20 minutes
+**Difficulty:** Easy
+
+### Step 1: Deploy Backend
+
 1. Go to [render.com](https://render.com)
-2. New → Static Site
-3. Connect GitHub repo
-4. Set:
+2. Sign up with GitHub
+3. Click "New +" → "Web Service"
+4. Connect your GitHub repo
+5. Configure:
+   - Name: `axovion-api`
+   - Root Directory: `backend`
+   - Environment: `Python 3`
+   - Build Command: `pip install -r requirements.txt`
+   - Start Command: `uvicorn server:app --host 0.0.0.0 --port $PORT`
+6. Add environment variables (all from `.env`)
+7. Click "Create Web Service"
+
+### Step 2: Deploy Frontend
+
+1. Click "New +" → "Static Site"
+2. Connect same repo
+3. Configure:
+   - Name: `axovion-web`
    - Root Directory: `frontend`
    - Build Command: `npm run build`
    - Publish Directory: `build`
-5. Add environment variables
-6. Deploy
-
-### Backend (Web Service)
-1. New → Web Service
-2. Connect same repo
-3. Set:
-   - Root Directory: `backend`
-   - Environment: Python 3
-   - Build Command: `pip install -r requirements.txt`
-   - Start Command: `uvicorn server:app --host 0.0.0.0 --port $PORT`
-4. Add environment variables
-5. Deploy
+4. Add environment variable:
+   - `REACT_APP_API_URL`: Your Render backend URL + `/api`
+5. Click "Create Static Site"
 
 ---
 
 ## Security Checklist
 
-### Essential Security Measures
+### Essential (Do These First)
 
-1. **Environment Variables**
-   - Never commit `.env` files
-   - Use strong, unique secrets in production
-   - Rotate API keys regularly
+- [ ] Change default admin password
+- [ ] Generate new JWT_SECRET (32+ random characters)
+- [ ] Enable MongoDB authentication
+- [ ] Configure CORS (don't use `*`)
+- [ ] Setup HTTPS/SSL
+- [ ] Disable root SSH login
+- [ ] Enable firewall (UFW)
+- [ ] Don't commit `.env` files
 
-2. **HTTPS Only**
-   - Force HTTPS redirects
-   - Use HSTS headers
-   - Keep SSL certificates updated
+### Recommended
 
-3. **API Security**
-   - Rate limiting on all endpoints
-   - Input validation and sanitization
-   - CORS properly configured
-   - JWT secret should be 32+ random characters
+- [ ] Setup fail2ban (VPS only)
+- [ ] Enable MongoDB backups
+- [ ] Setup log monitoring
+- [ ] Configure rate limiting
+- [ ] Regular security updates
+- [ ] Two-factor authentication (2FA) on all accounts
 
-4. **Database Security**
-   - Enable MongoDB authentication
-   - Use strong passwords
-   - Limit network access (whitelist IPs)
-   - Enable backups
+---
 
-5. **Server Security**
-   - Keep OS and packages updated
-   - Use firewall (UFW/iptables)
-   - Disable root login via SSH
-   - Use SSH keys only (no passwords)
-   - Setup fail2ban
+## Environment Variables Reference
 
-6. **Monitoring**
-   - Setup log rotation
-   - Monitor server resources
-   - Setup alerts for downtime
-   - Use PM2 for process monitoring
+### Backend (.env)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| MONGO_URL | Yes | MongoDB connection string |
+| DB_NAME | Yes | Database name |
+| JWT_SECRET | Yes | Secret key for JWT tokens |
+| ADMIN_EMAIL | Yes | Admin login email |
+| ADMIN_PASSWORD | Yes | Admin login password |
+| GROQ_API_KEY | Yes | Groq API key |
+| KIMI_API_KEY | No | Kimi API key (fallback) |
+| RESEND_API_KEY | Yes | Resend email API key |
+| RETELL_API_KEY | No | Retell calling API key |
+| VAPI_API_KEY | No | Vapi calling API key |
+| CORS_ORIGINS | Yes | Allowed frontend URLs |
+
+### Frontend (.env.production)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| REACT_APP_API_URL | Yes | Backend API URL |
+| REACT_APP_SITE_URL | Yes | Your domain |
 
 ---
 
 ## Performance Optimization
 
-### Frontend
-1. **Enable Gzip/Brotli compression** (Nginx/Cloudflare)
-2. **Use CDN** for static assets (Cloudflare, AWS CloudFront)
-3. **Optimize images** (WebP format, lazy loading)
-4. **Code splitting** (already configured in CRA)
-5. **Cache headers** for static assets
+### Quick Wins
 
-### Backend
-1. **Enable response compression**
-2. **Database indexing** (ensure MongoDB indexes are created)
-3. **Connection pooling** (Motor/PyMongo handles this)
-4. **Caching layer** (Redis for session/API caching)
-5. **Async operations** (already using async/await)
+1. **Enable Gzip** (Nginx/Cloudflare)
+2. **Use CDN** for static assets
+3. **Compress images** before uploading
+4. **Enable browser caching**
+5. **Minimize API calls**
 
-### Database
-1. **Proper indexing** on frequently queried fields
-2. **Regular backups** (MongoDB Atlas does this automatically)
-3. **Connection limits** (monitor active connections)
+### Database Optimization
 
----
-
-## Monitoring & Maintenance
-
-### Recommended Tools (Free Tiers)
-1. **Uptime Monitoring:** UptimeRobot (free, 5-min intervals)
-2. **Error Tracking:** Sentry (free tier)
-3. **Analytics:** Google Analytics 4 (free)
-4. **Server Monitoring:** Netdata or htop
-5. **Logs:** PM2 logs or journalctl
-
-### Regular Maintenance Tasks
-- Weekly: Check server updates
-- Monthly: Review logs for errors
-- Monthly: Rotate API keys
-- Quarterly: Security audit
-- Quarterly: Performance review
-
----
-
-## Cost Comparison (Monthly Estimates)
-
-| Platform | Frontend | Backend | Database | Total |
-|----------|----------|---------|----------|-------|
-| **Vercel + Railway + Atlas** | Free | Free | Free | **$0** |
-| **Vercel + Railway + Atlas** (Paid) | Free | $5 | Free | **$5** |
-| **Hetzner VPS** | Included | Included | Included | **$6** |
-| **DigitalOcean** | Included | Included | Included | **$6** |
-| **AWS (minimal)** | $1 | $5 | $10 | **$16** |
-
-*Note: Free tiers have limits. For production with traffic, expect $5-20/month.*
-
----
-
-## Quick Start: My Recommendation
-
-**For immediate deployment with minimal cost:**
-
-1. **Use Option 1 (Vercel + Railway)**
-   - Fastest setup (30 minutes)
-   - Free tier handles moderate traffic
-   - Automatic HTTPS and CDN
-   - Easy to scale
-
-2. **For cost savings long-term:**
-   - Switch to Option 3 (Hetzner VPS) after validating your product
-   - Single $6/month server handles everything
-   - More predictable pricing
-
-3. **Migration path:**
-   - Start with PaaS (Option 1)
-   - Move to VPS (Option 3) when ready
-   - Both use the same codebase
+```javascript
+// Add these indexes in MongoDB
+use axovion
+db.audits.createIndex({ "id": 1 }, { unique: true })
+db.chats.createIndex({ "sessionId": 1 })
+db.bookings.createIndex({ "createdAt": -1 })
+```
 
 ---
 
@@ -657,51 +841,75 @@ Add secrets in GitHub repository settings.
 
 ### Common Issues
 
-**1. CORS Errors**
-- Ensure `CORS_ORIGINS` includes your frontend URL exactly
-- Check for `http` vs `https`
-- Include `www` if using www subdomain
+**Backend won't start:**
+```bash
+# Check logs
+pm2 logs axovion-api
 
-**2. MongoDB Connection Failed**
-- Check IP whitelist in MongoDB Atlas
-- Verify connection string format
-- Ensure database user has correct permissions
+# Check port
+sudo lsof -i :8000
 
-**3. Environment Variables Not Loading**
-- Restart the server after adding env vars
-- Check variable names match exactly
-- Verify no quotes around values (unless needed)
+# Restart
+pm2 restart axovion-api
+```
 
-**4. Frontend Not Connecting to Backend**
-- Check `REACT_APP_API_URL` is set correctly
-- Verify backend URL is accessible
-- Check browser console for errors
+**Frontend shows blank page:**
+```bash
+# Rebuild
+npm run build
 
-**5. Slow Response Times**
-- Enable gzip compression
-- Check server location vs user location
-- Optimize database queries
-- Consider adding Redis caching
+# Check for errors
+npm run build 2>&1 | grep error
+```
 
----
+**MongoDB connection failed:**
+```bash
+# Check MongoDB status
+sudo systemctl status mongod
 
-## Support & Resources
+# Test connection
+mongosh "mongodb://localhost:27017/axovion"
+```
 
-- **Vercel Docs:** [vercel.com/docs](https://vercel.com/docs)
-- **Railway Docs:** [docs.railway.app](https://docs.railway.app)
-- **Render Docs:** [render.com/docs](https://render.com/docs)
-- **MongoDB Atlas:** [docs.mongodb.com/atlas](https://docs.mongodb.com/atlas)
-- **Nginx Docs:** [nginx.org/en/docs](https://nginx.org/en/docs)
-- **PM2 Docs:** [pm2.keymetrics.io](https://pm2.keymetrics.io)
+**CORS errors:**
+- Verify CORS_ORIGINS includes exact URL
+- Check http vs https
+- Include www if using www
 
 ---
 
-## Next Steps
+## Cost Comparison
 
-1. Choose your deployment option
-2. Follow the corresponding guide
-3. Test thoroughly before sharing
-4. Setup monitoring
-5. Share your live Axovion.io app!
+| Platform | Monthly Cost | Best For |
+|----------|--------------|----------|
+| **Vercel + Railway** | Free | Beginners, testing |
+| **Hetzner VPS** | $6 | Production, long-term |
+| **DigitalOcean** | $6 | Production, support |
+| **Render** | Free | Simple deployment |
+| **AWS** | $15-50 | Enterprise scale |
 
-**Questions?** Check the troubleshooting section or review the specific platform documentation.
+---
+
+## Next Steps After Deployment
+
+1. [ ] Test all features (chat, audit, admin)
+2. [ ] Setup monitoring (UptimeRobot)
+3. [ ] Configure backups (MongoDB Atlas)
+4. [ ] Add Google Analytics
+5. [ ] Test on mobile devices
+6. [ ] Share your site!
+
+---
+
+## Support Resources
+
+- **Railway Docs:** https://docs.railway.app
+- **Vercel Docs:** https://vercel.com/docs
+- **MongoDB Atlas:** https://docs.mongodb.com/atlas
+- **Nginx Docs:** https://nginx.org/en/docs
+- **Certbot:** https://certbot.eff.org
+- **PM2 Docs:** https://pm2.keymetrics.io
+
+---
+
+**Need help?** Check the troubleshooting section or platform-specific documentation.
