@@ -912,4 +912,397 @@ mongosh "mongodb://localhost:27017/axovion"
 
 ---
 
+---
+
+## Option 4: Docker + AWS ECS (Enterprise Grade)
+
+**Best for:** Production scale, microservices, enterprise
+**Cost:** $20-50/month (AWS)
+**Time:** 1-2 hours
+**Difficulty:** Intermediate
+
+### Why This Option?
+- Container orchestration with AWS ECS/Fargate
+- Auto-scaling based on demand
+- Load balancing across multiple instances
+- Managed database with DocumentDB or Atlas
+- CI/CD pipeline with GitHub Actions
+
+---
+
+### Prerequisites
+- AWS Account
+- AWS CLI installed locally
+- Docker installed locally
+- Domain name (optional)
+
+---
+
+### Step 1: Local Docker Setup
+
+#### 1.1 Build and test locally
+
+```bash
+# Build backend image
+cd backend
+docker build -t axovion-backend .
+
+# Build frontend image
+cd ../frontend
+docker build -t axovion-frontend .
+```
+
+#### 1.2 Run with docker-compose
+
+```bash
+# Create .env file in project root
+cp backend/.env .env
+
+# Start all services
+docker-compose up -d
+
+# Check status
+docker-compose ps
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+```
+
+#### 1.3 Test local deployment
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000/api/health
+- MongoDB: localhost:27017
+
+---
+
+### Step 2: AWS Infrastructure Setup
+
+#### 2.1 Create ECR Repositories
+
+```bash
+# Login to AWS
+aws configure
+
+# Create repositories
+aws ecr create-repository --repository-name axovion-backend
+aws ecr create-repository --repository-name axovion-frontend
+```
+
+#### 2.2 Create ECS Cluster
+
+```bash
+# Create cluster
+aws ecs create-cluster --cluster-name axovion-cluster
+
+# Create task execution role
+aws iam create-role \
+  --role-name ecsTaskExecutionRole \
+  --assume-role-policy-document file://aws/trust-policy.json
+
+# Attach policy
+aws iam attach-role-policy \
+  --role-name ecsTaskExecutionRole \
+  --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+```
+
+#### 2.3 Store secrets in AWS Systems Manager (SSM)
+
+```bash
+# Add each secret
+aws ssm put-parameter \
+  --name "/axovion/mongo-url" \
+  --value "your-mongodb-url" \
+  --type SecureString
+
+aws ssm put-parameter \
+  --name "/axovion/jwt-secret" \
+  --value "your-jwt-secret" \
+  --type SecureString
+
+# Add other secrets similarly...
+```
+
+#### 2.4 Create ECS Task Definitions
+
+Update `aws/ecs-task-definition.json` with your:
+- AWS Account ID
+- Repository URLs
+- SSM parameter ARNs
+
+Register task definition:
+```bash
+aws ecs register-task-definition --cli-input-json file://aws/ecs-task-definition.json
+```
+
+#### 2.5 Create ECS Services
+
+```bash
+# Create backend service
+aws ecs create-service \
+  --cluster axovion-cluster \
+  --service-name axovion-backend-service \
+  --task-definition axovion-task \
+  --desired-count 2 \
+  --launch-type FARGATE \
+  --network-configuration "awsvpcConfiguration={subnets=[subnet-xxxxxxxxx],securityGroups=[sg-xxxxxxxxx],assignPublicIp=ENABLED}"
+
+# Create frontend service
+aws ecs create-service \
+  --cluster axovion-cluster \
+  --service-name axovion-frontend-service \
+  --task-definition axovion-task \
+  --desired-count 2 \
+  --launch-type FARGATE \
+  --network-configuration "awsvpcConfiguration={subnets=[subnet-xxxxxxxxx],securityGroups=[sg-xxxxxxxxx],assignPublicIp=ENABLED}"
+```
+
+#### 2.6 Create Application Load Balancer
+
+```bash
+# Create load balancer
+aws elbv2 create-load-balancer \
+  --name axovion-alb \
+  --subnets subnet-xxxxxxxxx subnet-yyyyyyyyy \
+  --security-groups sg-xxxxxxxxx
+
+# Create target groups
+aws elbv2 create-target-group \
+  --name axovion-backend-tg \
+  --protocol HTTP \
+  --port 8000 \
+  --vpc-id vpc-xxxxxxxxx \
+  --target-type ip
+
+# Create listener rules
+aws elbv2 create-listener \
+  --load-balancer-arn arn:aws:elasticloadbalancing:us-east-1:xxxxxxxxx:loadbalancer/app/axovion-alb/xxxxxxxxx \
+  --protocol HTTPS \
+  --port 443 \
+  --certificates CertificateArn=arn:aws:acm:us-east-1:xxxxxxxxx:certificate/xxxxxxxxx \
+  --default-actions Type=forward,TargetGroupArn=arn:aws:elasticloadbalancing:us-east-1:xxxxxxxxx:targetgroup/axovion-backend-tg/xxxxxxxxx
+```
+
+---
+
+### Step 3: Setup CI/CD with GitHub Actions
+
+The repository includes `.github/workflows/deploy-aws.yml`. Configure these secrets in your GitHub repository:
+
+1. Go to GitHub → Settings → Secrets and variables → Actions
+2. Add the following secrets:
+
+| Secret Name | Description |
+|------------|-------------|
+| `AWS_ACCESS_KEY_ID` | Your AWS access key |
+| `AWS_SECRET_ACCESS_KEY` | Your AWS secret key |
+| `REACT_APP_API_URL` | Your backend API URL |
+
+3. Push to main branch to trigger deployment
+
+---
+
+### Step 4: Configure MongoDB Atlas for AWS
+
+1. Go to MongoDB Atlas
+2. Network Access → Add IP Address
+3. Add AWS security group or VPC peering
+4. Update connection string in SSM:
+   ```
+   mongodb+srv://username:password@cluster.mongodb.net/axovion?retryWrites=true&w=majority
+   ```
+
+---
+
+### Step 5: Setup CloudFront CDN (Optional)
+
+```bash
+# Create CloudFront distribution
+aws cloudfront create-distribution \
+  --origin-domain-name axovion-alb-xxxxxxxxx.us-east-1.elb.amazonaws.com \
+  --default-root-object index.html
+```
+
+---
+
+### Step 6: Configure Custom Domain
+
+1. Route 53 → Create hosted zone for your domain
+2. Create A record → Alias to CloudFront or ALB
+3. Request SSL certificate in ACM
+4. Update ALB listener to use certificate
+
+---
+
+### Step 7: Monitoring & Logging
+
+Enable CloudWatch:
+```bash
+# View logs
+aws logs tail /ecs/axovion --follow
+
+# Setup alarms
+aws cloudwatch put-metric-alarm \
+  --alarm-name axovion-high-cpu \
+  --metric-name CPUUtilization \
+  --namespace AWS/ECS \
+  --statistic Average \
+  --period 300 \
+  --threshold 80 \
+  --comparison-operator GreaterThanThreshold \
+  --dimensions Name=ClusterName,Value=axovion-cluster
+```
+
+---
+
+## Docker Commands Reference
+
+### Local Development
+```bash
+# Build images
+docker-compose build
+
+# Start services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f backend
+docker-compose logs -f frontend
+
+# Stop services
+docker-compose down
+
+# Rebuild after changes
+docker-compose up -d --build
+```
+
+### Production Deployment
+```bash
+# Login to ECR
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin YOUR_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com
+
+# Tag images
+docker tag axovion-backend:latest YOUR_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/axovion-backend:latest
+docker tag axovion-frontend:latest YOUR_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/axovion-frontend:latest
+
+# Push images
+docker push YOUR_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/axovion-backend:latest
+docker push YOUR_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/axovion-frontend:latest
+```
+
+---
+
+## AWS Cost Optimization
+
+### Free Tier Eligible (First 12 months)
+- 750 hours EC2 (t2.micro)
+- 5GB S3 storage
+- 1 million Lambda requests
+
+### Cost-Saving Tips
+1. Use Spot instances for non-critical workloads
+2. Enable Auto Scaling to handle traffic spikes
+3. Use CloudFront caching to reduce origin requests
+4. Monitor with AWS Cost Explorer
+5. Set up billing alerts
+
+### Estimated Monthly Costs
+| Service | Cost |
+|---------|------|
+| ECS Fargate (2 tasks) | $15-30 |
+| ALB | $16 |
+| DocumentDB/MongoDB | $10-20 |
+| CloudFront | $5-10 |
+| Route 53 | $0.50 |
+| **Total** | **$50-80** |
+
+---
+
+## Troubleshooting Docker Deployment
+
+### Container won't start
+```bash
+# Check logs
+docker logs axovion-backend
+
+# Check environment variables
+docker exec axovion-backend env
+
+# Shell into container
+docker exec -it axovion-backend /bin/sh
+```
+
+### MongoDB connection issues
+- Verify network connectivity: `docker network inspect axovion-network`
+- Check credentials in environment variables
+- Ensure MongoDB container is healthy
+
+### Frontend can't reach backend
+- Verify CORS_ORIGINS includes frontend URL
+- Check backend health endpoint
+- Inspect network in browser DevTools
+
+### High memory usage
+- Reduce Fargate task size
+- Enable swap space
+- Optimize Node.js memory: `--max-old-space-size=512`
+
+---
+
+## Security Best Practices for AWS
+
+1. **Use IAM roles** instead of access keys where possible
+2. **Enable CloudTrail** for API auditing
+3. **Use VPC** with private subnets for databases
+4. **Enable WAF** on CloudFront/ALB
+5. **Regular security scans** with Inspector
+6. **Encrypt data** at rest and in transit
+7. **Rotate secrets** regularly
+
+---
+
+## Migration from Other Platforms
+
+### From Vercel/Railway to AWS
+1. Export environment variables
+2. Create Docker images
+3. Push to ECR
+4. Update frontend API URL
+5. Deploy to ECS
+6. Update DNS
+
+### From VPS to AWS
+1. Containerize application
+2. Test locally with Docker
+3. Create ECS task definitions
+4. Deploy using GitHub Actions
+5. Migrate database to DocumentDB
+
+---
+
+## Support Resources
+
+- **AWS ECS Docs:** https://docs.aws.amazon.com/ecs/
+- **Docker Docs:** https://docs.docker.com
+- **AWS Fargate:** https://docs.aws.amazon.com/fargate
+- **MongoDB Atlas:** https://docs.mongodb.com/atlas
+- **GitHub Actions:** https://docs.github.com/actions
+
+---
+
+## Summary
+
+| Deployment Option | Best For | Cost | Difficulty |
+|-------------------|----------|------|------------|
+| **Vercel + Railway** | Beginners, quick deploy | Free | Easy |
+| **Hetzner VPS** | Cost-effective, full control | $6/mo | Medium |
+| **Docker + AWS** | Enterprise, scale, production | $50+/mo | Advanced |
+
+**Choose based on your needs:**
+- Testing/Development: Vercel + Railway
+- Small production: Hetzner VPS
+- Enterprise/Scale: Docker + AWS
+
 **Need help?** Check the troubleshooting section or platform-specific documentation.

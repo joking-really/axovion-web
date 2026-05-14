@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:6-jammy
+    container_name: axovion-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-changeme}
+      MONGO_INITDB_DATABASE: axovion
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - axovion-network
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: axovion-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGO_URL=mongodb://${MONGO_ROOT_USERNAME:-admin}:${MONGO_ROOT_PASSWORD:-changeme}@mongodb:27017/axovion?authSource=admin
+      - DB_NAME=axovion
+      - JWT_SECRET=${JWT_SECRET}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - KIMI_API_KEY=${KIMI_API_KEY}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - RETELL_API_KEY=${RETELL_API_KEY}
+      - VAPI_API_KEY=${VAPI_API_KEY}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+    depends_on:
+      - mongodb
+    networks:
+      - axovion-network
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: axovion-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - axovion-network
+
+volumes:
+  mongodb_data:
+
+networks:
+  axovion-network:
+    driver: bridge
