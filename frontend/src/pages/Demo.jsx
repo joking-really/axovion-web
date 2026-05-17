@@ -2,8 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Link } from 'react-router-dom';
 import { useScrollReveal } from '../lib/hooks';
-import { publicApi } from '../lib/api';
-import { getSessionId } from '../lib/hooks';
 import {
   ArrowRight, Sparkles, MessageCircle, X, Send
 } from 'lucide-react';
@@ -20,6 +18,41 @@ const Reveal = ({ children, delay = 0 }) => {
 
 const COLORS = ['#EF4444', '#F97316', '#10B981'];
 
+// Direct Groq API Configuration - No backend needed for demo
+// Add REACT_APP_GROQ_API_KEY to your .env file
+const GROQ_API_KEY = process.env.REACT_APP_GROQ_API_KEY;
+const GROQ_MODEL = 'llama-3.3-70b-versatile';
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+
+const SYS_PROMPT = `You are Aisha, AI Customer Support for BATIK (batik.com.pk), a premium Pakistani fashion brand based in Islamabad (Centaurus Mall). Tone: warm, helpful, professional. Use "ji" occasionally for respect. Never hallucinate prices or stock.
+
+CURRENT CATALOG SUMMARY:
+[Winter Pret 2025]
+- 2Pc Khaddar: PKR 5,100-5,600 (casual daily wear)
+- 2Pc Velvet: PKR 9,800 (luxe pret)
+- 3Pc Cotton: PKR 10,500 (embroidered festive)
+- 3Pc Karandi: PKR 12,600 (festive wear)
+- 3Pc Khaddar: PKR 7,700-11,900 (embroidered solids)
+- 3Pc Velvet: PKR 11,200-20,300 (formals/luxe)
+
+[Pret 2025 - Lawn & Summer]
+- 2Pc Lawn: PKR 4,200-4,500 (printed casual)
+- 2Pc Pima Lawn: PKR 4,900-9,000 (embroidered casual)
+- 3Pc Egyptian Cotton: PKR 10,500-13,300 (festive luxe)
+- 3Pc Lawn: PKR 6,300-10,500 (printed/embroidered)
+
+[Studio Formals]
+- 3Pc Net/Organza: PKR 29,000 (wedding formal)
+- 3Pc Velvet: PKR 17,500-23,100 (luxury festive)
+
+Sizes: XS, S, M, L, XL. Most items on 30% sale. Sale items: NO exchange/refund.
+
+SHIPPING: Free shipping nationwide via Postex. COD available. 7-10 working days.
+EXCHANGE: Within 7 days ONLY for damaged/defective. Email photo to care@batik.com.pk within 3 days.
+CONTACT: Helpline: 051-111-222-845 | WhatsApp: 0314-5600009
+
+Keep answers concise. Use bullet points for comparisons.`;
+
 const Demo = () => {
   // Calculator state
   const [csCount, setCsCount] = useState(4);
@@ -35,14 +68,16 @@ const Demo = () => {
   const [liveLoss, setLiveLoss] = useState(0);
   const [results, setResults] = useState({});
   
-  // Chatbot state - connected to real AI API
+  // Chatbot state - Direct Groq API
   const [chatOpen, setChatOpen] = useState(true);
   const [messages, setMessages] = useState([
     { role: 'assistant', content: "As-salamu alaykum! I'm Aisha, your AI assistant. I can help with:\n\n• Collections & new arrivals\n• Order tracking & delivery\n• Size & style recommendations\n• Exchange & return questions\n• Payment & shipping info\n\nWhat can I help you with?" }
   ]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
-  const sessionId = useRef(getSessionId());
+  const [chatHistory, setChatHistory] = useState([
+    { role: "system", content: SYS_PROMPT }
+  ]);
   const chatEndRef = useRef(null);
 
   // Charts data
@@ -131,7 +166,7 @@ const Demo = () => {
     return value;
   };
 
-  // Real AI Chatbot - connected to backend API
+  // Direct AI Chatbot - calls Groq API directly
   const sendChatMessage = useCallback(async () => {
     if (!chatInput.trim() || chatLoading) return;
     
@@ -139,31 +174,48 @@ const Demo = () => {
     setChatInput('');
     setChatLoading(true);
     
-    // Add user message immediately
+    // Add user message
+    const newHistory = [...chatHistory, { role: 'user', content: userMsg }];
     setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+    setChatHistory(newHistory);
 
     try {
-      // Call backend API (same as main chatbot)
-      const res = await publicApi.sendChat({ 
-        sessionId: sessionId.current, 
-        message: userMsg 
+      // Call Groq API directly
+      const res = await fetch(GROQ_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + GROQ_API_KEY,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: GROQ_MODEL,
+          messages: newHistory,
+          temperature: 0.7,
+          max_tokens: 500
+        })
       });
+      
+      if (!res.ok) throw new Error(res.status);
+      
+      const data = await res.json();
+      const reply = data.choices[0].message.content;
       
       // Add AI response
       setMessages(prev => [...prev, { 
         role: 'assistant', 
-        content: res.data.reply 
+        content: reply 
       }]);
+      setChatHistory(prev => [...prev, { role: 'assistant', content: reply }]);
     } catch (error) {
       console.error('Chat error:', error);
       setMessages(prev => [...prev, { 
         role: 'assistant', 
-        content: "I'm having trouble connecting right now. Please try again, or contact us at hello@axovion.io" 
+        content: "I'm having trouble connecting right now. Please check your API key or try again later." 
       }]);
     } finally {
       setChatLoading(false);
     }
-  }, [chatInput, chatLoading]);
+  }, [chatInput, chatLoading, chatHistory]);
 
   useEffect(() => {
     if (chatEndRef.current) {
