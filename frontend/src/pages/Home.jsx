@@ -8,6 +8,7 @@ import {
 import { ScrollWorld } from '../components/ScrollWorld';
 import { SERVICES, TESTIMONIALS } from '../lib/content';
 import { useScrollReveal } from '../lib/hooks';
+import { worldUrl } from '../lib/assetUrl';
 
 /* ---------------------------------------------------------------------------
    content.js carries a couple of raw HTML entities and long dashes from the
@@ -161,7 +162,11 @@ const Home = () => {
         <meta name="description" content="Axovion.io builds ROI-focused AI agents that automate customer support, lead follow-up, booking, and repetitive business workflows. Get your free AI Audit." />
         <meta property="og:title" content="Axovion.io | AI Automation Agency" />
         <meta property="og:description" content="Automate repetitive workflows in days, not quarters." />
-        <link rel="preload" as="image" type="image/webp" href="/world/img/dive1.webp" />
+        {/* LCP hint for the first poster. Routed through worldUrl so it points at the
+            CDN when one is configured. Deliberately no crossOrigin attribute: the
+            <img> loads without CORS, and a mismatched preload mode is ignored and
+            refetched. */}
+        <link rel="preload" as="image" type="image/webp" href={worldUrl('/world/img/dive1.webp')} />
       </Helmet>
 
       {/* HERO: the scroll cinematic.

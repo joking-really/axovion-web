@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import scrubEngine from '../vendor/scroll-world/scrub-engine';
+import { worldUrl, isCdnConfigured } from '../lib/assetUrl';
 import './ScrollWorld.css';
 
 /* The vendored engine is a CommonJS script (it also self-registers on window).
@@ -198,7 +199,7 @@ const StaticSequence = ({ scenes }) => (
 
           <div className="lg:col-span-7">
             <figure className="ax-sw-still m-0">
-              <img src={scene.still} alt={scene.alt} width="1920" height="1080" loading={index === 0 ? 'eager' : 'lazy'} decoding="async" />
+              <img src={worldUrl(scene.still)} alt={scene.alt} width="1920" height="1080" loading={index === 0 ? 'eager' : 'lazy'} decoding="async" />
             </figure>
           </div>
         </li>
@@ -230,12 +231,16 @@ export const ScrollWorld = ({
       diveScroll,
       connScroll,
       crossfade: 0.12,
+      // Use 'src' when assets are on a remote CDN so the engine assigns the URL
+      // directly to video.src, bypassing fetch and avoiding CORS preflight.
+      // Same-origin assets keep the proven 'blob' path (fetch -> object URL).
+      loadMode: isCdnConfigured ? 'src' : 'blob',
       sections: scenes.map((scene) => ({
         id: scene.id,
         label: scene.label,
-        still: scene.still,
-        clip: scene.clip,
-        clipMobile: scene.clipMobile,
+        still: worldUrl(scene.still),
+        clip: worldUrl(scene.clip),
+        clipMobile: worldUrl(scene.clipMobile),
         scroll: scene.scroll,
         linger: scene.linger,
         eyebrow: scene.eyebrow,
@@ -243,8 +248,10 @@ export const ScrollWorld = ({
         body: scene.body,
         cta: scene.cta,
       })),
-      connectors,
-      connectorsMobile,
+      // Connectors may be null (crossfade directly between two dives).
+      // The null is meaningful: do not rewrite it to a string.
+      connectors: connectors.map((c) => (c == null ? c : worldUrl(c))),
+      connectorsMobile: connectorsMobile.map((c) => (c == null ? c : worldUrl(c))),
     }),
     [scenes, connectors, connectorsMobile, diveScroll, connScroll]
   );

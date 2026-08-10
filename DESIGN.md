@@ -241,6 +241,18 @@ rendered neighbouring clips, never a re-render of the still. All clips re-encode
 frame-accurate. Total video budget for the page: 45 MB desktop, and clips lazy-load per
 band rather than upfront.
 
+**Asset hosting.** The cinematic media (poster images and video clips) lives in a
+Cloudflare R2 bucket, not in the git repository. Set `REACT_APP_WORLD_CDN` to the bucket
+root URL at build time (Create React App inlines it; a change needs a rebuild and
+redeploy). When the var is unset, all paths resolve to the same origin, so a local clone
+with the assets under `public/world/` works with no config.
+
+When a CDN base is set, the scrub engine uses `loadMode: 'src'` (assigns the URL directly
+to `video.src`, no fetch) so no CORS configuration is needed on the bucket. Without a CDN
+the engine uses `loadMode: 'blob'` (fetches the clip and plays from an object URL), which
+is the proven same-origin path. The static reduced-motion fallback resolves poster images
+through the same helper, so it works correctly in both configurations.
+
 **Fallback.** Under `prefers-reduced-motion: reduce`, on save-data connections, or if any
 clip fails to load, the hero renders the five stills as a conventional static sequence with
 the same copy. The page must be fully usable and fully readable with zero video bytes

@@ -125,6 +125,15 @@ function mountScrollWorld(container, config) {
   const DIVE_W = config.diveScroll || 1.3;
   const CONN_W = config.connScroll || 0.9;
   const CROSSFADE = (config.crossfade != null) ? config.crossfade : 0.12;  // seam dissolve width (vh)
+  // FORK: clip load strategy.
+  //   'blob' (default) fetches the whole clip and plays it from an object URL.
+  //     Guarantees seekability even on hosts that ignore HTTP range requests, but
+  //     the fetch is subject to CORS once the assets are cross-origin.
+  //   'src' assigns the URL straight to video.src. No fetch means no CORS
+  //     requirement on the bucket, which is what makes a plain CDN origin work.
+  //     Seeking then depends on the host honouring range requests. R2, S3 and
+  //     every real CDN do; a naive static server may not.
+  const LOAD_MODE = (config.loadMode === 'src') ? 'src' : 'blob';
   const N = SECTIONS.length;
   if (!N) return function destroy() {};
 
@@ -264,26 +273,52 @@ function mountScrollWorld(container, config) {
     s.loading = true;
     // Serve the lighter mobile encode on phones when one was provided.
     const url = (isMobile() && s.clipM) ? s.clipM : s.clip;
+    // FORK: direct-src path. No fetch, so no CORS requirement on the asset origin.
+    if (LOAD_MODE === 'src') {
+      if (destroyed) { s.loading = false; return; }
+      const v = buildVideo(s);
+      // A cross-origin media element must NOT set crossOrigin, or the browser
+      // performs a CORS check and the load fails against a bucket without
+      // Access-Control-Allow-Origin. Plain playback needs no such header.
+      v.src = url;
+      // If the origin ignores range requests the clip will not be seekable and
+      // the scene would freeze on frame 0; fall back to the still in that case
+      // rather than showing a stuck frame.
+      v.addEventListener('loadedmetadata', () => {
+        if (!v.seekable || v.seekable.length === 0 || v.seekable.end(0) === 0) {
+          s.el.classList.remove('has-clip');
+          s.ready = false;
+        }
+      });
+      v.addEventListener('error', () => { s.loading = false; s.ready = false; s.el.classList.remove('has-clip'); });
+      return;
+    }
+
     // fork: signal lets destroy() abort clips still in flight.
     fetch(url, { signal: fetchAbort.signal }).then(r => r.ok ? r.blob() : Promise.reject(new Error('404')))
       .then(blob => {
         // fork: a fetch can resolve inside the teardown race. Mint nothing.
         if (destroyed) return;
-        const v = document.createElement('video');
-        v.className = 'sw-scene__video';
-        v.muted = true; v.playsInline = true; v.preload = 'auto';
-        v.setAttribute('muted', ''); v.setAttribute('playsinline', '');
         const objUrl = URL.createObjectURL(blob);
         s.blobUrl = objUrl;
-        v.src = objUrl;
-        v.addEventListener('loadedmetadata', () => { s.ready = true; read(); });
-        // Reveal the video (hide the still poster) only once a real frame has
-        // painted — on iOS a seeked-but-never-played muted video stays blank, so
-        // hiding the still on metadata alone would flash an empty scene.
-        v.addEventListener('seeked', () => { s.el.classList.add('has-clip'); }, { once: true });
-        v.addEventListener('loadeddata', () => { try { v.pause(); } catch (e) {} if (userReady) primeVideo(v); });
-        s.el.appendChild(v); s.video = v; s.hasClip = true;
+        buildVideo(s).src = objUrl;
       }).catch(() => { s.loading = false; });
+  }
+
+  // FORK: shared video-element construction for both load strategies.
+  function buildVideo(s) {
+    const v = document.createElement('video');
+    v.className = 'sw-scene__video';
+    v.muted = true; v.playsInline = true; v.preload = 'auto';
+    v.setAttribute('muted', ''); v.setAttribute('playsinline', '');
+    v.addEventListener('loadedmetadata', () => { s.ready = true; read(); });
+    // Reveal the video (hide the still poster) only once a real frame has
+    // painted — on iOS a seeked-but-never-played muted video stays blank, so
+    // hiding the still on metadata alone would flash an empty scene.
+    v.addEventListener('seeked', () => { s.el.classList.add('has-clip'); }, { once: true });
+    v.addEventListener('loadeddata', () => { try { v.pause(); } catch (e) {} if (userReady) primeVideo(v); });
+    s.el.appendChild(v); s.video = v; s.hasClip = true;
+    return v;
   }
 
   function read() {
