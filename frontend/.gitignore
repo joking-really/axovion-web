@@ -21,9 +21,3 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-
-# World cinematic assets (poster images and video clips).
-# These are served from Cloudflare R2 (REACT_APP_WORLD_CDN) and are not
-# committed to the repo. Keep a local copy under public/world/ if you need
-# to run the cinematic without a CDN.
-/public/world/

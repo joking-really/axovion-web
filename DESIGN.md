@@ -241,11 +241,17 @@ rendered neighbouring clips, never a re-render of the still. All clips re-encode
 frame-accurate. Total video budget for the page: 45 MB desktop, and clips lazy-load per
 band rather than upfront.
 
-**Asset hosting.** The cinematic media (poster images and video clips) lives in a
-Cloudflare R2 bucket, not in the git repository. Set `REACT_APP_WORLD_CDN` to the bucket
-root URL at build time (Create React App inlines it; a change needs a rebuild and
-redeploy). When the var is unset, all paths resolve to the same origin, so a local clone
-with the assets under `public/world/` works with no config.
+**Asset hosting.** The cinematic media (nine clips, nine mobile variants, nine poster
+images, 33 MB total) is committed to the repo under `public/world/` and served from the
+same origin. A fresh clone works with no configuration, which is the point: the hero is
+the landing page, and it should not depend on infrastructure that can be misconfigured.
+
+Moving the media to a CDN later costs one environment variable and no code change. Set
+`REACT_APP_WORLD_CDN` to the bucket root and every asset path re-resolves through
+`worldUrl()` in `src/lib/assetUrl.js`. Create React App inlines the value at build time,
+so a change needs a rebuild rather than just a redeploy. The tradeoff is worth naming:
+33 MB sits in git history permanently and every clone pays for it, in exchange for a
+project that always works from a clone.
 
 When a CDN base is set, the scrub engine uses `loadMode: 'src'` (assigns the URL directly
 to `video.src`, no fetch) so no CORS configuration is needed on the bucket. Without a CDN
