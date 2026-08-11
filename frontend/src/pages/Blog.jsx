@@ -1,16 +1,38 @@
 import React, { useState } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { ArrowRight, Mail, Search, Clock } from 'lucide-react';
+import { ArrowRight, Search, Clock, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import { BLOG_POSTS } from '../lib/content';
 import { publicApi } from '../lib/api';
 import { useScrollReveal } from '../lib/hooks';
 
+/* ── Layout strategy:
+   Filter bar + search flush left. Featured post: full-width editorial banner
+   (image spans one column, headline huge, no card). Secondary posts: a
+   deliberately non-uniform list with date, category, and a horizontal rule
+   between each item, so it reads like a table of contents rather than a tile
+   grid. Newsletter panel: 2-col split at the bottom. Four layout families
+   across the page.
+   Eyebrow budget: ceil(4 / 3) = 2 allowed. Using 1 (Newsletter panel).
+── */
+
 const CATEGORIES = ['All', 'Strategy', 'Case Studies', 'Tools', 'Trends'];
+
+function formatDate(iso) {
+  return new Date(iso).toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
 
 const Reveal = ({ children, delay = 0 }) => {
   const ref = useScrollReveal();
-  return <div ref={ref} className="ax-reveal" style={{ transitionDelay: `${delay}ms` }}>{children}</div>;
+  return (
+    <div ref={ref} className="ax-reveal" style={{ transitionDelay: `${delay}ms` }}>
+      {children}
+    </div>
+  );
 };
 
 const Blog = () => {
@@ -21,22 +43,29 @@ const Blog = () => {
 
   const filtered = BLOG_POSTS.filter((p) => {
     if (cat !== 'All' && p.category !== cat) return false;
-    if (q && !(p.title + ' ' + p.excerpt).toLowerCase().includes(q.toLowerCase())) return false;
+    if (
+      q &&
+      !(p.title + ' ' + p.excerpt).toLowerCase().includes(q.toLowerCase())
+    )
+      return false;
     return true;
   });
 
-  const featured = filtered[0];
+  const featured = filtered[0] ?? null;
   const rest = filtered.slice(1);
 
   const subscribe = async (e) => {
     e.preventDefault();
-    if (!email) { toast.error('Enter your email.'); return; }
+    if (!email) {
+      toast.error('Enter your email.');
+      return;
+    }
     setSubscribing(true);
     try {
       await publicApi.newsletterSignup({ email, source: 'blog' });
-      toast.success('Subscribed! Check your inbox.');
+      toast.success('Subscribed. Check your inbox.');
       setEmail('');
-    } catch (e) {
+    } catch {
       toast.error('Subscription failed. Try again.');
     } finally {
       setSubscribing(false);
@@ -47,128 +76,442 @@ const Blog = () => {
     <>
       <Helmet>
         <title>Blog &amp; Resources | Axovion.io</title>
-        <meta name="description" content="Practical AI automation guides, case studies, and strategies for business owners." />
+        <meta
+          name="description"
+          content="Practical AI automation guides, case studies, and strategies for business owners."
+        />
       </Helmet>
 
-      <section className="relative ax-section bg-[#0A0A0F]" data-testid="blog-page">
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute -inset-24 bg-[radial-gradient(700px_circle_at_30%_20%,rgba(0,212,255,0.10),transparent_60%)]" />
-        </div>
-        <div className="relative ax-container">
-          <div className="font-mono text-[11px] tracking-[0.18em] uppercase text-[#00D4FF] mb-4">Blog</div>
-          <h1 className="text-white text-[40px] md:text-[64px] leading-[1.05] tracking-[-0.03em] font-extrabold max-w-3xl">AI automation insights</h1>
-          <p className="mt-5 text-[#C0C0C8]/80 text-lg max-w-2xl">Practical guides, case studies, and strategies for business owners.</p>
+      {/* ── Section 1: Page header (left-aligned, no eyebrow) ── */}
+      <section
+        className="ax-section"
+        style={{ background: 'var(--ax-bg)', paddingBottom: '2rem' }}
+        data-testid="blog-page"
+      >
+        <div className="ax-container">
+          <h1
+            className="text-white font-extrabold tracking-[-0.03em] leading-[1.05]"
+            style={{ fontSize: 'clamp(2.25rem, 5vw, 4rem)', maxWidth: '28ch', textWrap: 'balance' }}
+          >
+            AI automation insights
+          </h1>
+          <p
+            className="mt-5 text-lg leading-relaxed"
+            style={{ color: 'var(--ax-text)', maxWidth: '52ch' }}
+          >
+            Practical guides, case studies, and strategies for business owners.
+          </p>
         </div>
       </section>
 
-      <section className="pb-20 md:pb-[120px] bg-[#0A0A0F]">
+      {/* ── Section 2: Filter bar + search ── */}
+      <section
+        className="pb-10"
+        style={{ background: 'var(--ax-bg)' }}
+      >
         <div className="ax-container">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-10">
-            <div className="flex flex-wrap gap-2">
-              {CATEGORIES.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setCat(c)}
-                  data-testid={`blog-filter-${c.toLowerCase().replace(/\s+/g, '-')}`}
-                  className={`text-sm px-3.5 py-2 rounded-full border transition-colors duration-200 ${
-                    cat === c
-                      ? 'bg-[#00D4FF]/12 border-[#00D4FF]/40 text-[#00D4FF]'
-                      : 'bg-[#12121A] border-white/10 text-[#C0C0C8] hover:text-white hover:border-[#00D4FF]/25'
-                  }`}
-                >
-                  {c}
-                </button>
-              ))}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            {/* Category pills */}
+            <div className="flex flex-wrap gap-2" role="list" aria-label="Filter by category">
+              {CATEGORIES.map((c) => {
+                const active = cat === c;
+                return (
+                  <button
+                    key={c}
+                    role="listitem"
+                    onClick={() => setCat(c)}
+                    data-testid={`blog-filter-${c.toLowerCase().replace(/\s+/g, '-')}`}
+                    style={{
+                      padding: '0.4rem 1rem',
+                      minHeight: '44px',
+                      borderRadius: 'var(--ax-radius-pill)',
+                      border: active
+                        ? '1px solid rgba(0,212,255,0.4)'
+                        : '1px solid var(--ax-border)',
+                      background: active
+                        ? 'rgba(0,212,255,0.1)'
+                        : 'var(--ax-surface)',
+                      color: active ? 'var(--ax-accent)' : 'var(--ax-text)',
+                      fontSize: '0.875rem',
+                      fontWeight: active ? 600 : 400,
+                      cursor: 'pointer',
+                      transition: 'border-color 200ms, color 200ms, background 200ms',
+                    }}
+                    aria-pressed={active}
+                  >
+                    {c}
+                  </button>
+                );
+              })}
             </div>
-            <div className="relative md:w-72">
-              <Search className="h-4 w-4 text-[#C0C0C8]/55 absolute left-3 top-1/2 -translate-y-1/2" />
+
+            {/* Search */}
+            <div className="flex-shrink-0 w-full md:w-72">
+              <label
+                htmlFor="blog-search-input"
+                className="flex items-center gap-1.5 mb-1.5 text-sm font-medium"
+                style={{ color: 'var(--ax-muted)' }}
+              >
+                <Search
+                  strokeWidth={1.5}
+                  className="h-4 w-4"
+                  style={{ color: 'var(--ax-accent)' }}
+                  aria-hidden="true"
+                />
+                Search articles
+              </label>
               <input
+                id="blog-search-input"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Search articles…"
+                placeholder="Type to filter..."
+                aria-label="Search articles"
                 data-testid="blog-search"
-                className="w-full bg-[#12121A] border border-white/10 rounded-[12px] pl-9 pr-3 py-2.5 text-sm text-white placeholder:text-[#C0C0C8]/40 focus:outline-none focus:border-[#00D4FF]/45"
+                style={{
+                  width: '100%',
+                  background: 'var(--ax-surface)',
+                  border: '1px solid var(--ax-border)',
+                  borderRadius: 'var(--ax-radius-control)',
+                  paddingLeft: '0.75rem',
+                  paddingRight: '0.75rem',
+                  paddingTop: '0.6rem',
+                  paddingBottom: '0.6rem',
+                  fontSize: '0.875rem',
+                  color: 'var(--ax-heading)',
+                  outline: 'none',
+                  minHeight: '44px',
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = 'rgba(0,212,255,0.45)';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--ax-border)';
+                }}
               />
             </div>
           </div>
+        </div>
+      </section>
 
-          {featured && (
+      {/* ── Section 3: Featured post (full-width editorial banner) ── */}
+      {featured && (
+        <section
+          className="pb-0"
+          style={{ background: 'var(--ax-bg)' }}
+        >
+          <div className="ax-container">
             <Reveal>
-              <article className="rounded-[16px] bg-[#12121A] border border-white/10 overflow-hidden grid grid-cols-1 lg:grid-cols-12 gap-0 hover:border-[#00D4FF]/30 transition-colors duration-300" data-testid="blog-featured-post">
-                <div className="lg:col-span-6 aspect-[16/10] bg-[#0A0A0F] overflow-hidden">
-                  <img src={featured.image} alt={featured.title} className="w-full h-full object-cover" loading="lazy" />
+              <article
+                className="grid grid-cols-1 lg:grid-cols-12 overflow-hidden"
+                style={{
+                  borderRadius: 'var(--ax-radius-panel)',
+                  border: '1px solid var(--ax-border)',
+                  background: 'var(--ax-surface)',
+                }}
+                data-testid="blog-featured-post"
+              >
+                {/* Image */}
+                <div
+                  className="lg:col-span-5 relative"
+                  style={{ minHeight: '280px', background: 'var(--ax-bg)' }}
+                >
+                  <img
+                    src={featured.image}
+                    alt={featured.title}
+                    loading="lazy"
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                    }}
+                  />
                 </div>
-                <div className="lg:col-span-6 p-7 md:p-10 flex flex-col justify-center">
+
+                {/* Text */}
+                <div
+                  className="lg:col-span-7 flex flex-col justify-center p-7 md:p-10"
+                >
                   <div className="flex items-center gap-3 mb-4">
-                    <span className="text-[10px] font-mono uppercase tracking-widest text-[#00D4FF] bg-[#00D4FF]/10 border border-[#00D4FF]/25 px-2.5 py-1 rounded-full">{featured.category}</span>
-                    <span className="text-[10px] font-mono uppercase tracking-widest text-[#C0C0C8]/55">Featured</span>
+                    <span
+                      style={{
+                        fontSize: '0.7rem',
+                        fontFamily: 'JetBrains Mono, monospace',
+                        letterSpacing: '0.12em',
+                        textTransform: 'uppercase',
+                        color: 'var(--ax-accent)',
+                        background: 'rgba(0,212,255,0.08)',
+                        border: '1px solid rgba(0,212,255,0.25)',
+                        padding: '0.2rem 0.6rem',
+                        borderRadius: 'var(--ax-radius-pill)',
+                      }}
+                    >
+                      {featured.category}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: '0.75rem',
+                        color: 'var(--ax-muted-2)',
+                        letterSpacing: '0.05em',
+                      }}
+                    >
+                      Featured
+                    </span>
                   </div>
-                  <h2 className="text-white text-2xl md:text-3xl font-extrabold tracking-tight leading-snug">{featured.title}</h2>
-                  <p className="mt-3 text-[#C0C0C8]/75 leading-relaxed">{featured.excerpt}</p>
-                  <div className="mt-6 flex items-center gap-4 text-xs text-[#C0C0C8]/60">
-                    <span>{new Date(featured.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</span>
-                    <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" /> {featured.readTime}</span>
+
+                  <h2
+                    className="text-white font-extrabold tracking-tight leading-snug"
+                    style={{ fontSize: 'clamp(1.25rem, 2.5vw, 2rem)' }}
+                  >
+                    {featured.title}
+                  </h2>
+
+                  <p
+                    className="mt-3 text-base leading-relaxed"
+                    style={{ color: 'var(--ax-muted)', maxWidth: '55ch' }}
+                  >
+                    {featured.excerpt}
+                  </p>
+
+                  <div
+                    className="mt-6 flex items-center gap-4 text-sm"
+                    style={{ color: 'var(--ax-muted-2)' }}
+                  >
+                    <time dateTime={featured.date}>{formatDate(featured.date)}</time>
+                    <span className="inline-flex items-center gap-1">
+                      <Clock strokeWidth={1.5} className="h-3.5 w-3.5" aria-hidden="true" />
+                      {featured.readTime}
+                    </span>
                   </div>
                 </div>
               </article>
             </Reveal>
-          )}
-
-          <div className="mt-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {rest.map((p, i) => (
-              <Reveal key={p.slug} delay={i * 60}>
-                <article className="h-full rounded-[16px] bg-[#12121A] border border-white/10 overflow-hidden transition-[transform,border-color] duration-300 hover:-translate-y-1 hover:border-[#00D4FF]/30" data-testid={`blog-post-${p.slug}`}>
-                  <div className="aspect-[16/10] bg-[#0A0A0F] overflow-hidden">
-                    <img src={p.image} alt={p.title} className="w-full h-full object-cover" loading="lazy" />
-                  </div>
-                  <div className="p-6">
-                    <span className="text-[10px] font-mono uppercase tracking-widest text-[#00D4FF] bg-[#00D4FF]/10 border border-[#00D4FF]/25 px-2.5 py-1 rounded-full">{p.category}</span>
-                    <h3 className="mt-4 text-white text-lg font-bold leading-snug">{p.title}</h3>
-                    <p className="mt-2 text-[#C0C0C8]/70 text-sm leading-relaxed">{p.excerpt}</p>
-                    <div className="mt-5 pt-4 border-t border-white/8 flex items-center justify-between text-xs text-[#C0C0C8]/60">
-                      <span>{new Date(p.date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</span>
-                      <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" /> {p.readTime}</span>
-                    </div>
-                  </div>
-                </article>
-              </Reveal>
-            ))}
           </div>
+        </section>
+      )}
 
-          {filtered.length === 0 && (
-            <div className="text-center py-20">
-              <p className="text-[#C0C0C8]/60">No articles match your filter.</p>
+      {/* ── Section 4: Rest of posts as editorial list ── */}
+      {rest.length > 0 && (
+        <section
+          className="pt-10 pb-20 md:pb-[120px]"
+          style={{ background: 'var(--ax-bg)' }}
+        >
+          <div className="ax-container">
+            <div
+              style={{ borderTop: '1px solid var(--ax-border)' }}
+            >
+              {rest.map((p, i) => (
+                <Reveal key={p.slug} delay={i * 60}>
+                  <article
+                    className="grid grid-cols-1 sm:grid-cols-12 gap-4 py-7"
+                    style={{ borderBottom: '1px solid var(--ax-border)' }}
+                    data-testid={`blog-post-${p.slug}`}
+                  >
+                    {/* Thumbnail: compact, not dominant */}
+                    <div
+                      className="sm:col-span-3 relative overflow-hidden"
+                      style={{
+                        borderRadius: 'var(--ax-radius-control)',
+                        background: 'var(--ax-surface)',
+                        aspectRatio: '16/9',
+                      }}
+                    >
+                      <img
+                        src={p.image}
+                        alt={p.title}
+                        loading="lazy"
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                        }}
+                      />
+                    </div>
+
+                    {/* Text block */}
+                    <div className="sm:col-span-7 flex flex-col justify-center">
+                      <div className="flex items-center gap-3 mb-2">
+                        <span
+                          style={{
+                            fontSize: '0.7rem',
+                            fontFamily: 'JetBrains Mono, monospace',
+                            letterSpacing: '0.12em',
+                            textTransform: 'uppercase',
+                            color: 'var(--ax-accent)',
+                            background: 'rgba(0,212,255,0.08)',
+                            border: '1px solid rgba(0,212,255,0.25)',
+                            padding: '0.15rem 0.5rem',
+                            borderRadius: 'var(--ax-radius-pill)',
+                          }}
+                        >
+                          {p.category}
+                        </span>
+                      </div>
+                      <h3
+                        className="text-white font-semibold leading-snug"
+                        style={{ fontSize: 'clamp(1rem, 1.8vw, 1.2rem)' }}
+                      >
+                        {p.title}
+                      </h3>
+                      <p
+                        className="mt-2 text-sm leading-relaxed"
+                        style={{ color: 'var(--ax-muted)', maxWidth: '60ch' }}
+                      >
+                        {p.excerpt}
+                      </p>
+                    </div>
+
+                    {/* Meta: date + read time, right-aligned on desktop */}
+                    <div
+                      className="sm:col-span-2 flex sm:flex-col sm:items-end sm:justify-center gap-2 text-xs"
+                      style={{ color: 'var(--ax-muted-2)' }}
+                    >
+                      <time dateTime={p.date}>{formatDate(p.date)}</time>
+                      <span className="inline-flex items-center gap-1">
+                        <Clock strokeWidth={1.5} className="h-3 w-3" aria-hidden="true" />
+                        {p.readTime}
+                      </span>
+                    </div>
+                  </article>
+                </Reveal>
+              ))}
             </div>
-          )}
+          </div>
+        </section>
+      )}
 
+      {/* Empty state */}
+      {filtered.length === 0 && (
+        <section className="pb-20" style={{ background: 'var(--ax-bg)' }}>
+          <div className="ax-container">
+            <p
+              className="py-16 text-base"
+              style={{ color: 'var(--ax-muted)' }}
+            >
+              No articles match your filter. Try a different category or clear your search.
+            </p>
+          </div>
+        </section>
+      )}
+
+      {/* ── Section 5: Newsletter (2-col split) ── */}
+      <section
+        className="pb-20 md:pb-[120px]"
+        style={{ background: 'var(--ax-bg)' }}
+      >
+        <div className="ax-container">
           <Reveal>
-            <div className="mt-16 rounded-[16px] bg-[#12121A] border border-white/10 p-7 md:p-10 grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-10 items-center" data-testid="blog-newsletter-section">
+            <div
+              className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-12 items-center p-7 md:p-10"
+              style={{
+                borderRadius: 'var(--ax-radius-panel)',
+                background: 'var(--ax-surface)',
+                border: '1px solid var(--ax-border)',
+              }}
+              data-testid="blog-newsletter-section"
+            >
               <div>
-                <div className="inline-flex items-center gap-2 mb-3">
-                  <Mail className="h-4 w-4 text-[#00D4FF]" />
-                  <div className="font-mono text-[10px] tracking-[0.18em] uppercase text-[#00D4FF]">Weekly</div>
+                <div
+                  className="flex items-center gap-2 mb-3"
+                >
+                  <Mail
+                    strokeWidth={1.5}
+                    className="h-4 w-4"
+                    style={{ color: 'var(--ax-accent)' }}
+                    aria-hidden="true"
+                  />
+                  <span
+                    style={{
+                      fontFamily: 'JetBrains Mono, monospace',
+                      fontSize: '0.68rem',
+                      letterSpacing: '0.18em',
+                      textTransform: 'uppercase',
+                      color: 'var(--ax-accent)',
+                    }}
+                  >
+                    Weekly digest
+                  </span>
                 </div>
-                <h3 className="text-white text-2xl md:text-3xl font-extrabold tracking-tight">Get AI automation tips weekly</h3>
-                <p className="mt-3 text-[#C0C0C8]/75">One short note a week: a real automation we shipped, how it was built, and the ROI numbers. No fluff.</p>
+                <h2
+                  className="text-white font-extrabold tracking-tight"
+                  style={{ fontSize: 'clamp(1.25rem, 2.5vw, 1.75rem)' }}
+                >
+                  One automation a week
+                </h2>
+                <p
+                  className="mt-3 text-base leading-relaxed"
+                  style={{ color: 'var(--ax-muted)', maxWidth: '44ch' }}
+                >
+                  A real automation we shipped, how it was built, and the ROI numbers.
+                  No filler, no announcements.
+                </p>
               </div>
-              <form onSubmit={subscribe} className="flex flex-col sm:flex-row gap-3">
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  placeholder="you@company.com"
-                  aria-label="Email"
-                  data-testid="blog-newsletter-email"
-                  className="flex-1 bg-[#0A0A0F] border border-white/10 rounded-[12px] px-4 py-3 text-sm text-white placeholder:text-[#C0C0C8]/40 focus:outline-none focus:border-[#00D4FF]/45"
-                />
+
+              <form
+                onSubmit={subscribe}
+                className="flex flex-col sm:flex-row gap-3"
+                noValidate
+              >
+                <label className="flex-1 flex flex-col gap-1">
+                  <span className="sr-only">Your email address</span>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    placeholder="you@company.com"
+                    aria-label="Email address"
+                    data-testid="blog-newsletter-email"
+                    style={{
+                      background: 'var(--ax-bg)',
+                      border: '1px solid var(--ax-border)',
+                      borderRadius: 'var(--ax-radius-control)',
+                      padding: '0.75rem 1rem',
+                      fontSize: '0.875rem',
+                      color: 'var(--ax-heading)',
+                      outline: 'none',
+                      minHeight: '44px',
+                    }}
+                    onFocus={(e) => {
+                      e.currentTarget.style.borderColor = 'rgba(0,212,255,0.45)';
+                    }}
+                    onBlur={(e) => {
+                      e.currentTarget.style.borderColor = 'var(--ax-border)';
+                    }}
+                  />
+                </label>
                 <button
                   type="submit"
                   disabled={subscribing}
                   data-testid="blog-newsletter-submit"
-                  className="inline-flex items-center justify-center gap-2 rounded-[12px] bg-[#F97316] text-[#0A0A0F] px-6 py-3 text-sm font-bold transition-colors duration-200 hover:bg-[#FBBF24] disabled:opacity-60"
+                  className="inline-flex items-center justify-center gap-2 text-sm font-semibold transition-colors duration-200 active:scale-[0.98]"
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    minHeight: '44px',
+                    borderRadius: 'var(--ax-radius-control)',
+                    background: 'var(--ax-accent)',
+                    color: 'var(--ax-on-accent)',
+                    cursor: subscribing ? 'not-allowed' : 'pointer',
+                    opacity: subscribing ? 0.6 : 1,
+                    whiteSpace: 'nowrap',
+                  }}
+                  onMouseOver={(e) => {
+                    if (!subscribing)
+                      e.currentTarget.style.background = 'var(--ax-accent-dim)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.background = subscribing
+                      ? 'var(--ax-accent)'
+                      : 'var(--ax-accent)';
+                  }}
                 >
-                  Subscribe <ArrowRight className="h-4 w-4" />
+                  {subscribing ? 'Subscribing...' : 'Subscribe'}
+                  {!subscribing && (
+                    <ArrowRight strokeWidth={1.5} className="h-4 w-4" aria-hidden="true" />
+                  )}
                 </button>
               </form>
             </div>
