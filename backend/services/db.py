@@ -1,17 +1,47 @@
-"""DB helpers + serialization for MongoDB."""
 import os
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict
 from motor.motor_asyncio import AsyncIOMotorClient
 from pathlib import Path
 from dotenv import load_dotenv
 
+logger = logging.getLogger(__name__)
+
 ROOT_DIR = Path(__file__).parent.parent
 load_dotenv(ROOT_DIR / ".env")
 
-mongo_url = os.environ["MONGO_URL"]
-_client = AsyncIOMotorClient(mongo_url)
-db = _client[os.environ["DB_NAME"]]
+mongo_url = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
+db_name = os.environ.get("DB_NAME", "axovion")
+
+
+class DatabaseProxy:
+    def __init__(self):
+        self._target = None
+
+    def set_target(self, target):
+        self._target = target
+
+    def __getattr__(self, name):
+        if self._target is None:
+            raise RuntimeError("Database not initialized yet.")
+        return getattr(self._target, name)
+
+    def __getitem__(self, name):
+        if self._target is None:
+            raise RuntimeError("Database not initialized yet.")
+        return self._target[name]
+
+
+db = DatabaseProxy()
+
+try:
+    _client = AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=1000)
+    db.set_target(_client[db_name])
+except Exception:
+    import mongomock_motor
+    _client = mongomock_motor.AsyncMongoMockClient()
+    db.set_target(_client[db_name])
 
 
 def serialize_doc(doc: Dict[str, Any]) -> Dict[str, Any]:
@@ -56,13 +86,30 @@ def deserialize_doc(doc: Dict[str, Any]) -> Dict[str, Any]:
 
 async def init_db():
     """Create indexes + seed defaults."""
-    await db.audits.create_index("id", unique=True)
-    await db.chats.create_index("sessionId")
-    await db.tasks.create_index("id", unique=True)
-    await db.email_logs.create_index("sentAt")
-    await db.call_logs.create_index("id", unique=True)
-    await db.bookings.create_index("id", unique=True)
-    await db.users.create_index("email", unique=True)
+    global _client, db
+    try:
+        if isinstance(_client, AsyncIOMotorClient):
+            await _client.admin.command("ping")
+            logger.info("Successfully connected to MongoDB at %s", mongo_url)
+    except Exception as e:
+        logger.warning(
+            "MongoDB is not reachable (%s). Falling back to in-memory mock MongoDB storage for local development.",
+            e,
+        )
+        import mongomock_motor
+        _client = mongomock_motor.AsyncMongoMockClient()
+        db.set_target(_client[db_name])
+
+    try:
+        await db.audits.create_index("id", unique=True)
+        await db.chats.create_index("sessionId")
+        await db.tasks.create_index("id", unique=True)
+        await db.email_logs.create_index("sentAt")
+        await db.call_logs.create_index("id", unique=True)
+        await db.bookings.create_index("id", unique=True)
+        await db.users.create_index("email", unique=True)
+    except Exception as e:
+        logger.warning("Index creation note: %s", e)
 
     # Seed default admin user (idempotent)
     from services.auth_service import hash_password

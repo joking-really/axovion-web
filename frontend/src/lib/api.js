@@ -1,3 +1,4 @@
+/* global process */
 import axios from 'axios';
 
 // API Configuration
@@ -5,9 +6,6 @@ import axios from 'axios';
 // In development, use localhost
 export const BACKEND_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
 export const API = BACKEND_URL;
-
-// Debug logging (remove in production if desired)
-console.log('API URL:', API);
 
 export const api = axios.create({
   baseURL: API,
@@ -23,6 +21,21 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
+
+// On 401, clear the stored token and redirect to login
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      localStorage.removeItem('ax_token');
+      localStorage.removeItem('ax_user');
+      if (window.location.pathname !== '/admin/login') {
+        window.location.href = '/admin/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 // Public api (no auth interceptor side-effects)
 export const publicApi = {

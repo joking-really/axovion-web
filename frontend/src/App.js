@@ -14,6 +14,7 @@ import About from './pages/About';
 import Team from './pages/Team';
 import Blog from './pages/Blog';
 import Contact from './pages/Contact';
+import NotFound from './pages/NotFound';
 
 import AdminLogin from './pages/admin/Login';
 import AdminLayout from './pages/admin/AdminLayout';
@@ -61,8 +62,9 @@ function App() {
             <Route path="settings" element={<AdminSettings />} />
           </Route>
 
-          {/* 404 -> Home */}
-          <Route path="*" element={<WithPublic><Home /></WithPublic>} />
+          {/* Real 404. This previously rendered <Home />, so every mistyped or retired
+              URL resolved as a duplicate homepage and was eligible for indexing. */}
+          <Route path="*" element={<WithPublic><NotFound /></WithPublic>} />
         </Routes>
         <Toaster
           theme="dark"
